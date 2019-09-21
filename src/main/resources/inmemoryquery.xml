@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+    <comment>Queries</comment>
+    <entry key="example.query">
+        Select name from table
+        where col1 = ? and col2 = ?
+    </entry>
+    <entry key="example.storedprocedure.with.params">
+        EXEC dbo.getPlentyThings ?
+    </entry>
+    <entry key="example.storedprocedure.without.params">
+        dbo.getMorePlentyThings
+    </entry>
+</properties>
