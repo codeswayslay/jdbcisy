@@ -3,39 +3,35 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package org.einkar.jdbcisy;
+package org.jdbcisy;
 
 import java.sql.CallableStatement;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-import org.einkar.jdbcisy.properties.JdbcProperties;
+import javax.naming.NamingException;
+import org.jdbcisy.connection.ConnectionHelper;
+import org.jdbcisy.connection.ConnectionType;
+import org.jdbcisy.properties.JdbcProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
  *
- * @author akinwale.agbaje
- * @deprecated will no longer be updated. Utilise {@link DatabaseDatasourceEngine}
+ * @author akinw
  */
-public class DatabaseEngine {
+public class DatabaseDatasourceEngine {
 
-    private static final Logger logger = LogManager.getLogger(DatabaseEngine.class);
+    private static final Logger logger = LogManager.getLogger(DatabaseDatasourceEngine.class);
 
-    private final String REPORT_HOST = "report.host";
-    private final String REPORT_PORT = "report.port";
-    private final String REPORT_DB = "report.db";
-    private final String REPORT_USERNAME = "report.username";
-    private final String REPORT_PASSWORD = "report.password";
-    private final String REPORT_DEPOSITORY = "report.depository";
-
-    private Properties prop;
-    private Connection connection;
+    private final Properties prop;
+    private ConnectionHelper connection;
+    private PreparedStatement preparedStatement;
+    private CallableStatement callableStatement;
 
     /**
      * Starts up the database engine using in-memory jdbc configuration.
@@ -43,15 +39,8 @@ public class DatabaseEngine {
      *
      * @throws Exception if SQL error occurs or microsoft driver class not found
      */
-    public DatabaseEngine() throws Exception {
-        try {
-            this.prop = JdbcProperties.getInstance();
-            openConnection();
-        } catch (ClassNotFoundException | SQLException ex) {
-            logger.info("An exception has been thrown while trying connect to the database");
-            logger.error("An exception has been thrown while trying connect to the database", ex);
-            throw new Exception("An exception has been thrown while trying connect to the database. Please contact Administrator. Exception: " + ex);
-        }
+    public DatabaseDatasourceEngine() throws Exception {
+        this.prop = JdbcProperties.getInstance();
     }
 
     /**
@@ -61,15 +50,8 @@ public class DatabaseEngine {
      * @param propFile path and name of the jdbc configuration file to load
      * @throws Exception if SQL error occurs or microsoft driver class not found
      */
-    public DatabaseEngine(String propFile) throws Exception {
-        try {
-            this.prop = JdbcProperties.getInstance(propFile);
-            openConnection();
-        } catch (ClassNotFoundException | SQLException ex) {
-            logger.info("An exception has been thrown while trying connect to the database");
-            logger.error("An exception has been thrown while trying connect to the database", ex);
-            throw new Exception("An exception has been thrown while trying connect to the database. Please contact Administrator. Exception: " + ex);
-        }
+    public DatabaseDatasourceEngine(String propFile) throws Exception {
+        this.prop = JdbcProperties.getInstance(propFile);
     }
 
     /**
@@ -79,32 +61,20 @@ public class DatabaseEngine {
      * @param prop the properties object to use
      * @throws Exception if SQL error occurs or microsoft driver class not found
      */
-    public DatabaseEngine(Properties prop) throws Exception {
-        try {
-            this.prop = prop;
-            openConnection();
-        } catch (ClassNotFoundException | SQLException ex) {
-            logger.info("An exception has been thrown while trying connect to the database");
-            logger.error("An exception has been thrown while trying connect to the database", ex);
-            throw new Exception("An exception has been thrown while trying connect to the database. Please contact Administrator. Exception: " + ex);
-        }
+    public DatabaseDatasourceEngine(Properties prop) throws Exception {
+        this.prop = prop;
     }
 
     /**
-     * Opens a connection to the database. Configuration parameters are loaded
-     * from the jdbc configuration properties file.
-     *
-     * @throws ClassNotFoundException if driver class not found (in this case,
-     * microsoft)
-     * @throws SQLException
+     * Opens a connection to the database.
+     * @param type the type of connection to open (Oracle, Sql Server, My Sql, a datasource, etc)
+     * @throws SQLException if the connection isn't successful
+     * @throws NamingException if the JNDI is invalid
+     * @throws Exception if any other general issues occur
      */
-    private void openConnection() throws ClassNotFoundException, SQLException {
-        Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
-        String connectionURL = "jdbc:sqlserver://" + prop.getProperty(REPORT_HOST) + ":" + prop.getProperty(REPORT_PORT)
-                + ";databaseName=" + prop.getProperty(REPORT_DB);
-        logger.info("Attempting to establish connection to: [{}]", connectionURL);
-        connection = DriverManager.getConnection(connectionURL, prop.getProperty(REPORT_USERNAME), prop.getProperty(REPORT_PASSWORD));
-        logger.info("Connected to: [{}]", connectionURL);
+    public void openConnection(ConnectionType type) throws SQLException, NamingException, Exception {
+        connection = new ConnectionHelper(prop);
+        connection.getPrepareConnection(type);
     }
 
     /**
@@ -123,12 +93,14 @@ public class DatabaseEngine {
             throw new Exception("The parameter blocks in the statement does not match the number of parameters passed");
         }
 
-        PreparedStatement statement = connection.prepareStatement(sqlStatement);
-        statement = insertParameters(statement, parameters);
-        ResultSet rs = statement.executeQuery();
+        preparedStatement = connection.getConnection().prepareStatement(sqlStatement);
+        preparedStatement = insertParameters(preparedStatement, parameters);
+        ResultSet rs = preparedStatement.executeQuery();
 
         List resultList = extractDataFromResultset(rs);
-        statement.close();
+        
+        rs.close();
+        preparedStatement.close();
 
         return resultList;
     }
@@ -150,16 +122,22 @@ public class DatabaseEngine {
         }
 
         logger.info("the sql escape syntax eventually sent to server is", sqlStatement);
-        CallableStatement statement = connection.prepareCall(sqlStatement);
-        statement = insertProcedureParameters(statement, parameters);
+        callableStatement = connection.getConnection().prepareCall(sqlStatement);
+        callableStatement = insertProcedureParameters(callableStatement, parameters);
         ResultSet rs = null;
-        if (statement.execute()) {
-            rs = statement.getResultSet();
+        if (callableStatement.execute()) {
+            rs = callableStatement.getResultSet();
         } else {
             logger.info("No record is found is the resultset object...");
         }
 
         List resultList = extractDataFromResultset(rs);
+        
+        if (rs != null) {
+            rs.close();
+        }
+        callableStatement.close();
+        
         return resultList;
     }
     
@@ -180,17 +158,88 @@ public class DatabaseEngine {
         }
 
         logger.info("the sql escape syntax eventually sent to server is", sqlStatement);
-        CallableStatement statement = connection.prepareCall(sqlStatement);
-        statement = insertProcedureParameters(statement, parameters);
+        callableStatement = connection.getConnection().prepareCall(sqlStatement);
+        callableStatement = insertProcedureParameters(callableStatement, parameters);
         ResultSet rs = null;
-        if (statement.execute()) {
-            rs = statement.getResultSet();
+        if (callableStatement.execute()) {
+            rs = callableStatement.getResultSet();
         } else {
             logger.info("No record is found is the resultset object...");
         }
         return rs;
     }
 
+    /**
+     * Runs the provided sql script.
+     *
+     * @param sqlStatement the sql statement script
+     * @param parameters the parameters to feed into the scripts
+     * @return the result list, containing two items: (1) the headers, (2) the
+     * data
+     * @throws SQLException
+     * @throws Exception
+     */
+    public ResultSet returnResultSet(String sqlStatement, Object... parameters) throws SQLException, Exception {
+        if (parameters.length != countParameterBlocksInStatement(sqlStatement)) {
+            logger.info("The parameter blocks in the statement does not match the number of parameters passed");
+            throw new Exception("The parameter blocks in the statement does not match the number of parameters passed");
+        }
+
+        preparedStatement = connection.getConnection().prepareStatement(sqlStatement);
+        preparedStatement = insertParameters(preparedStatement, parameters);
+        ResultSet rs = preparedStatement.executeQuery();
+
+        return rs;
+    }
+    
+    /**
+     * Commits the transaction. Must be called after
+     * {@link #runStatement(java.lang.String, java.lang.Object...)}
+     *
+     * @throws SQLException
+     */
+    public void commitTransaction() throws SQLException {
+        connection.getConnection().commit();
+    }
+
+    /**
+     * Closes the connection to the database. Must be called after
+     * {@link #commitTransaction()}
+     *
+     * @throws SQLException
+     */
+    public void closeConnection() throws SQLException {
+        connection.getConnection().close();
+    }
+
+    /**
+     * Gets the database connection. NOTE: the connection could very well be
+     * invalid at the time of call.
+     *
+     * @return
+     */
+    public Connection getDatabaseConnection() {
+        return connection.getConnection();
+    }
+    
+    /**
+     * Closes the prepared statement used in a query.
+     * 
+     * @throws SQLException 
+     */
+    public void closePreparedStatement() throws SQLException {
+        preparedStatement.close();
+    }
+    
+    /**
+     * Closes a callable statement used in a query.
+     * 
+     * @throws SQLException 
+     */
+    public void closeCallableStatement() throws SQLException {
+        callableStatement.close();
+    }
+    
     /**
      * Dynamically inserts query parameter into prepared statement script.
      *
@@ -283,69 +332,5 @@ public class DatabaseEngine {
         }
 
         return records;
-    }
-
-    /**
-     * Commits the transaction. Must be called after
-     * {@link #runStatement(java.lang.String, java.lang.Object...)}
-     *
-     * @throws SQLException
-     */
-    public void commitTransaction() throws SQLException {
-        connection.commit();
-    }
-
-    /**
-     * Closes the connection to the database. Must be called after
-     * {@link #commitTransaction()}
-     *
-     * @throws SQLException
-     */
-    public void closeConnection() throws SQLException {
-        connection.close();
-    }
-
-    /**
-     * Gets the database connection. NOTE: the connection could very well be
-     * invalid at the time of call.
-     *
-     * @return
-     */
-    public Connection getDatabaseConnection() {
-        return connection;
-    }
-
-    /**
-     * Returns the depository set in the jdbc configuration file. The depository
-     * path should be the location where reports are stored, although the user
-     * isn't required to use it
-     *
-     * @return
-     */
-    public String returnDepository() {
-        return prop.getProperty(REPORT_DEPOSITORY);
-    }
-
-    /**
-     * Runs the provided sql script.
-     *
-     * @param sqlStatement the sql statement script
-     * @param parameters the parameters to feed into the scripts
-     * @return the result list, containing two items: (1) the headers, (2) the
-     * data
-     * @throws SQLException
-     * @throws Exception
-     */
-    public ResultSet returnResultSet(String sqlStatement, Object... parameters) throws SQLException, Exception {
-        if (parameters.length != countParameterBlocksInStatement(sqlStatement)) {
-            logger.info("The parameter blocks in the statement does not match the number of parameters passed");
-            throw new Exception("The parameter blocks in the statement does not match the number of parameters passed");
-        }
-
-        PreparedStatement statement = connection.prepareStatement(sqlStatement);
-        statement = insertParameters(statement, parameters);
-        ResultSet rs = statement.executeQuery();
-
-        return rs;
     }
 }

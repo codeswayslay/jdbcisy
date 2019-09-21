@@ -3,14 +3,14 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package org.einkar.jdbcisy.test;
+package org.jdbcisy.test;
 
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
-import org.einkar.jdbcisy.DatabaseEngine;
-import org.einkar.jdbcisy.transformer.Transformer;
-import org.einkar.jdbcisy.properties.InMemoryQueryProperties;
+import org.jdbcisy.DatabaseEngine;
+import org.jdbcisy.transformer.Transformer;
+import org.jdbcisy.properties.InMemoryQueryProperties;
 
 /**
  *
