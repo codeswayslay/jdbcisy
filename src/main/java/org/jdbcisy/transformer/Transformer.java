@@ -56,20 +56,20 @@ public class Transformer {
         
         Path path = Paths.get(pathToFile, filename);
         
-        File excelFile = path.toFile();
-        if (excelFile.getParentFile() == null) {
+        File csvFile = path.toFile();
+        if (csvFile.getParentFile() == null) {
             logger.info("no directory specified");
         } else {
-            if (!excelFile.getParentFile().exists()) {
+            if (!csvFile.getParentFile().exists()) {
                 logger.info("directory does not exist. It will be created");
-                excelFile.getParentFile().mkdirs();
+                csvFile.getParentFile().mkdirs();
             }
         }
         
         String extension = "";
-        int index = excelFile.getName().lastIndexOf('.');
+        int index = csvFile.getName().lastIndexOf('.');
         if (index > 0) {
-            extension = excelFile.getName().substring(index + 1);
+            extension = csvFile.getName().substring(index + 1);
         }
         
         if (!extension.equalsIgnoreCase("xlsx")) {
