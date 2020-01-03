@@ -81,7 +81,7 @@ public class Transformer {
         CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(headers.toArray(new String[headers.size()])));
         
         for (Object[] objArray : body) {
-            csvPrinter.printRecords(objArray);
+            csvPrinter.printRecord(objArray);
         }
         
         csvPrinter.flush();
