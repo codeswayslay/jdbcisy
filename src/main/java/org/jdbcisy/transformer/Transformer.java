@@ -72,7 +72,7 @@ public class Transformer {
             extension = csvFile.getName().substring(index + 1);
         }
         
-        if (!extension.equalsIgnoreCase("xlsx")) {
+        if (!extension.equalsIgnoreCase("csv")) {
             logger.info("file with incorrect extension provided. Extension is {} when it should be xlsx", extension);
             throw new Exception("file with incorrect extension provided. Extension is " + extension + " when it should be xlsx");
         }
